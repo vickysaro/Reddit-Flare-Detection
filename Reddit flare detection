@@ -1,0 +1,95 @@
+import os
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+from google.colab import auth
+from oauth2client.client import GoogleCredentials
+import praw
+import pandas as pd
+import datetime as dt
+import logging
+import numpy as np
+from numpy import random
+import gensim
+import nltk
+nltk.download('all')
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.metrics import accuracy_score, confusion_matrix
+import matplotlib.pyplot as plt
+from nltk.corpus import stopwords
+import re
+from bs4 import BeautifulSoup
+from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.metrics import classification_report
+
+Getting Reddit India Data
+
+reddit = praw.Reddit(client_id='#', client_secret='#', user_agent='#', username='#', password='#')
+
+subreddit = reddit.subreddit('india')
+topics_dict = {"flair":[], "title":[], "score":[], "id":[], "url":[], "comms_num": [], "created": [], "body":[], "author":[], "comments":[]}
+
+for flair in flairs:
+  
+  get_subreddits = subreddit.search(flair, limit=100)
+  
+  for submission in get_subreddits:
+    
+    topics_dict["flair"].append(flair)
+    topics_dict["title"].append(submission.title)
+    topics_dict["score"].append(submission.score)
+    topics_dict["id"].append(submission.id)
+    topics_dict["url"].append(submission.url)
+    topics_dict["comms_num"].append(submission.num_comments)
+    topics_dict["created"].append(submission.created)
+    topics_dict["body"].append(submission.selftext)
+    topics_dict["author"].append(submission.author)
+    
+    submission.comments.replace_more(limit=None)
+    comment = ''
+    for top_level_comment in submission.comments:
+      comment = comment + ' ' + top_level_comment.body
+    topics_dict["comments"].append(comment)
+    
+topics_data = pd.DataFrame(topics_dict)
+_timestamp = topics_data["created"].apply(get_date)
+topics_data = topics_data.assign(timestamp = _timestamp)
+del topics_data['created']
+topics_data.to_csv('reddit-india-data.csv', index=False)
+
+Load Reddit India Data
+
+topics_data = pd.read_csv('reddit-india-data.csv')
+topics_data.head(10)
+
+
+Text Pre-Processing
+
+topics_data['title'] = topics_data['title'].apply(string_form)
+topics_data['body'] = topics_data['body'].apply(string_form)
+topics_data['comments'] = topics_data['comments'].apply(string_form)
+
+topics_data['title'] = topics_data['title'].apply(clean_text)
+topics_data['body'] = topics_data['body'].apply(clean_text)
+topics_data['comments'] = topics_data['comments'].apply(clean_text)
+
+feature_combine = topics_data["title"] + topics_data["comments"] + topics_data["url"]
+topics_data = topics_data.assign(feature_combine = feature_combine)
+
+Random Forest
+
+def randomforest(X_train, X_test, y_train, y_test):
+  
+  from sklearn.ensemble import RandomForestClassifier
+  
+  ranfor = Pipeline([('vect', CountVectorizer()),
+                  ('tfidf', TfidfTransformer()),
+                  ('clf', RandomForestClassifier(n_estimators = 1000, random_state = 42)),
+                 ])
+  ranfor.fit(X_train, y_train)
+
+  y_pred = ranfor.predict(X_test)
+
+  print('accuracy %s' % accuracy_score(y_pred, y_test))
+  print(classification_report(y_test, y_pred,target_names=flairs))
